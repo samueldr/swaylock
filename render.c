@@ -142,22 +142,7 @@ static void configure_font_drawing(cairo_t *cairo, struct swaylock_state *state,
 	cairo_font_options_destroy(fo);
 }
 
-static void draw_classic_wheel(struct render_context *render_context) {
-	// Fill inner circle
-	cairo_set_line_width(render_context->cairo, 0);
-	cairo_arc(render_context->cairo, render_context->buffer_width / 2, render_context->buffer_diameter / 2,
-			render_context->arc_radius - render_context->arc_thickness / 2, 0, 2 * M_PI);
-	set_color_for_state(render_context->cairo, render_context->state, &render_context->state->args.colors.inside);
-	cairo_fill_preserve(render_context->cairo);
-	cairo_stroke(render_context->cairo);
-
-	// Draw ring
-	cairo_set_line_width(render_context->cairo, render_context->arc_thickness);
-	cairo_arc(render_context->cairo, render_context->buffer_width / 2, render_context->buffer_diameter / 2, render_context->arc_radius,
-			0, 2 * M_PI);
-	set_color_for_state(render_context->cairo, render_context->state, &render_context->state->args.colors.ring);
-	cairo_stroke(render_context->cairo);
-
+static void draw_text(struct render_context *render_context) {
 	// Draw a message
 	configure_font_drawing(render_context->cairo, render_context->state, render_context->surface->subpixel, render_context->arc_radius);
 	set_color_for_state(render_context->cairo, render_context->state, &render_context->state->args.colors.text);
@@ -178,6 +163,54 @@ static void draw_classic_wheel(struct render_context *render_context) {
 		cairo_close_path(render_context->cairo);
 		cairo_new_sub_path(render_context->cairo);
 	}
+
+	// display layout text separately
+	if (render_context->layout_text) {
+		cairo_text_extents_t extents;
+		cairo_font_extents_t fe;
+		double x, y;
+		double box_padding = 4.0 * render_context->surface->scale;
+		cairo_text_extents(render_context->cairo, render_context->layout_text, &extents);
+		cairo_font_extents(render_context->cairo, &fe);
+		// upper left coordinates for box
+		x = (render_context->buffer_width / 2) - (extents.width / 2) - box_padding;
+		y = render_context->buffer_diameter;
+
+		// background box
+		cairo_rectangle(render_context->cairo, x, y,
+			extents.width + 2.0 * box_padding,
+			fe.height + 2.0 * box_padding);
+		cairo_set_source_u32(render_context->cairo, render_context->state->args.colors.layout_background);
+		cairo_fill_preserve(render_context->cairo);
+		// border
+		cairo_set_source_u32(render_context->cairo, render_context->state->args.colors.layout_border);
+		cairo_stroke(render_context->cairo);
+
+		// take font extents and padding into account
+		cairo_move_to(render_context->cairo,
+			x - extents.x_bearing + box_padding,
+			y + (fe.height - fe.descent) + box_padding);
+		cairo_set_source_u32(render_context->cairo, render_context->state->args.colors.layout_text);
+		cairo_show_text(render_context->cairo, render_context->layout_text);
+		cairo_new_sub_path(render_context->cairo);
+	}
+}
+
+static void draw_classic_wheel(struct render_context *render_context) {
+	// Fill inner circle
+	cairo_set_line_width(render_context->cairo, 0);
+	cairo_arc(render_context->cairo, render_context->buffer_width / 2, render_context->buffer_diameter / 2,
+			render_context->arc_radius - render_context->arc_thickness / 2, 0, 2 * M_PI);
+	set_color_for_state(render_context->cairo, render_context->state, &render_context->state->args.colors.inside);
+	cairo_fill_preserve(render_context->cairo);
+	cairo_stroke(render_context->cairo);
+
+	// Draw ring
+	cairo_set_line_width(render_context->cairo, render_context->arc_thickness);
+	cairo_arc(render_context->cairo, render_context->buffer_width / 2, render_context->buffer_diameter / 2, render_context->arc_radius,
+			0, 2 * M_PI);
+	set_color_for_state(render_context->cairo, render_context->state, &render_context->state->args.colors.ring);
+	cairo_stroke(render_context->cairo);
 
 	// Typing indicator: Highlight random part on keypress
 	if (render_context->state->input_state == INPUT_STATE_LETTER ||
@@ -237,37 +270,6 @@ static void draw_classic_wheel(struct render_context *render_context) {
 	cairo_arc(render_context->cairo, render_context->buffer_width / 2, render_context->buffer_diameter / 2,
 			render_context->arc_radius + render_context->arc_thickness / 2, 0, 2 * M_PI);
 	cairo_stroke(render_context->cairo);
-
-	// display layout text separately
-	if (render_context->layout_text) {
-		cairo_text_extents_t extents;
-		cairo_font_extents_t fe;
-		double x, y;
-		double box_padding = 4.0 * render_context->surface->scale;
-		cairo_text_extents(render_context->cairo, render_context->layout_text, &extents);
-		cairo_font_extents(render_context->cairo, &fe);
-		// upper left coordinates for box
-		x = (render_context->buffer_width / 2) - (extents.width / 2) - box_padding;
-		y = render_context->buffer_diameter;
-
-		// background box
-		cairo_rectangle(render_context->cairo, x, y,
-			extents.width + 2.0 * box_padding,
-			fe.height + 2.0 * box_padding);
-		cairo_set_source_u32(render_context->cairo, render_context->state->args.colors.layout_background);
-		cairo_fill_preserve(render_context->cairo);
-		// border
-		cairo_set_source_u32(render_context->cairo, render_context->state->args.colors.layout_border);
-		cairo_stroke(render_context->cairo);
-
-		// take font extents and padding into account
-		cairo_move_to(render_context->cairo,
-			x - extents.x_bearing + box_padding,
-			y + (fe.height - fe.descent) + box_padding);
-		cairo_set_source_u32(render_context->cairo, render_context->state->args.colors.layout_text);
-		cairo_show_text(render_context->cairo, render_context->layout_text);
-		cairo_new_sub_path(render_context->cairo);
-	}
 }
 
 static bool render_frame(struct swaylock_surface *surface) {
@@ -406,6 +408,7 @@ static bool render_frame(struct swaylock_surface *surface) {
 	if (draw_indicator) {
 		draw_classic_wheel(&render_context);
 	}
+	draw_text(&render_context);
 
 	// Send Wayland requests
 	wl_subsurface_set_position(surface->subsurface, subsurf_xpos, subsurf_ypos);
