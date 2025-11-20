@@ -129,9 +129,15 @@ static void submit_password(struct swaylock_state *state) {
 }
 
 static void update_highlight(struct swaylock_state *state) {
+#ifdef TRUE
+	// Advance a single step amount
+	state->highlight_start =
+		(state->highlight_start + (1 % 1024) + 2048/9) % 2048;
+#else
 	// Advance a random amount between 1/4 and 3/4 of a full turn
 	state->highlight_start =
 		(state->highlight_start + (rand() % 1024) + 512) % 2048;
+#endif
 }
 
 void swaylock_handle_key(struct swaylock_state *state,
