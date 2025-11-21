@@ -427,8 +427,12 @@ static bool render_frame(struct swaylock_surface *surface) {
 			render_context.state->input_state != INPUT_STATE_IDLE ||
 			render_context.state->args.indicator_idle_visible);
 
+	// TODO: options...
+	bool with_pinpad = true;
+	bool has_text = draw_indicator || with_pinpad;
+
 	// Prepare the actual text content.
-	if (draw_indicator) {
+	if (has_text) {
 		if (render_context.state->input_state == INPUT_STATE_CLEAR) {
 			// This message has highest priority
 			render_context.text = "Cleared";
