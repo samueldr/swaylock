@@ -22,6 +22,9 @@ enum input_state {
 	INPUT_STATE_LETTER, // pressed a key that input a letter
 	INPUT_STATE_BACKSPACE, // pressed backspace and removed a letter
 	INPUT_STATE_NEUTRAL, // pressed a key (like Ctrl) that did nothing
+	// Pinpad
+	INPUT_STATE_PAD_ACTIVE, // For the pin pad, so we don't leak numbers
+	INPUT_STATE_PAD_BACKSPACE_ACTIVE, // For the pin pad, so it looks more correct.
 };
 
 struct swaylock_colorset {

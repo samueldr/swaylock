@@ -6,6 +6,27 @@
 #include "background-image.h"
 #include "swaylock.h"
 #include "log.h"
+#include "pinpad.h"
+
+#define WIDGET_UI_PROPORTION (65/100.0)
+
+// TODO: better color selection than a define :/
+#ifndef COLOR_RGB_SELECTED
+#define COLOR_RGB_SELECTED COLOR_RGB_WHITE
+#endif
+
+#ifndef FONT_SELECTED
+#define FONT_SELECTED "Roboto Condensed Light"
+#endif
+
+#define FONT_CLOCK_MULTIPLIER (26/10.0)
+
+#define COLOR_RGB_WHITE 1, 1, 1
+#define COLOR_RGB_BLACK 0, 0, 0
+
+#define WIDGET_RATIO_WIDTH 11
+#define WIDGET_RATIO_HEIGHT 16
+#define WIDGET_PADDING 16
 
 #define M_PI 3.14159265358979323846
 const float TYPE_INDICATOR_RANGE = M_PI / 3.0f;
@@ -272,6 +293,140 @@ static void draw_classic_wheel(struct render_context *render_context) {
 	cairo_stroke(render_context->cairo);
 }
 
+static void draw_pad_text(
+	cairo_t *ctx
+	, const char *text
+	, double x
+	, double y
+	, double width
+	, bool centered
+) {
+	cairo_text_extents_t extents;
+
+	cairo_text_extents(ctx, text, &extents);
+	y -= extents.y_bearing;
+	if (centered) {
+		x += width/2 - ((extents.width / 2) + extents.x_bearing);
+	}
+
+	cairo_move_to(ctx, x, y);
+	cairo_show_text(ctx, text);
+	cairo_close_path(ctx);
+}
+
+static void draw_button(
+	struct render_context* render_context
+	, int32_t widget_width
+	, int32_t widget_height
+	, int32_t x
+	, int32_t y
+	, int32_t i
+	, int32_t j
+	, double font_size
+) {
+	cairo_t *ctx = render_context->cairo;
+	int32_t num = i + 3*j;
+	int32_t button_width = floor(widget_width / 3);
+	int32_t button_height = floor(widget_height / 4);
+	char text[16] = "";
+	bool pressed = false;
+
+
+	// Merge outlines
+	x += 1;
+	y += 3;
+	button_width -= 1;
+	button_height -= 1;
+
+	x += i*button_width;
+	y += j*button_height;
+
+	num += 1;
+	switch (num) {
+		case PAD_BUTTON_BACKSPACE:
+			strncpy(text, "<=", 16);
+			break;
+		case PAD_BUTTON_ZERO:
+			strncpy(text, "0", 16);
+			break;
+		case PAD_BUTTON_SEND:
+			strncpy(text, ">>", 16);
+			break;
+		default:
+			snprintf(text, 16, "%d", num);
+			break;
+	}
+
+	if (render_context->state->input_state == INPUT_STATE_PAD_ACTIVE) {
+		// FIXME
+		// if (password[input_position-1] == text[0]) {
+		//     pressed = true;
+		// }
+	}
+	if (render_context->state->auth_state == AUTH_STATE_VALIDATING && num == 12) {
+		pressed = true;
+	}
+	if (render_context->state->input_state == INPUT_STATE_PAD_BACKSPACE_ACTIVE && num == 10) {
+		pressed = true;
+	}
+
+	if (pressed) {
+		cairo_rectangle(ctx, x, y, button_width, button_height);
+		cairo_set_source_rgba(ctx, COLOR_RGB_SELECTED, 1);
+		cairo_stroke(ctx);
+	}
+
+	cairo_rectangle(ctx, x, y, button_width, button_height);
+	cairo_set_source_rgba(ctx, COLOR_RGB_SELECTED, 0.1);
+	if (pressed) {
+		cairo_set_source_rgba(ctx, COLOR_RGB_SELECTED, 0.4);
+	}
+	cairo_fill(ctx);
+
+	cairo_set_source_rgba(ctx, COLOR_RGB_SELECTED, 1);
+	int32_t middle = button_height / 2 - font_size/2 + 4;
+
+	draw_pad_text(ctx, text, x, y + middle, button_width, true);
+}
+
+static void draw_pinpad(struct render_context *render_context) {
+	cairo_surface_t *surface = (cairo_surface_t*)cairo_get_target(render_context->cairo);
+	const double scaling_factor = render_context->surface->scale;
+	int32_t widget_width = cairo_image_surface_get_width(surface);
+	int32_t widget_height = cairo_image_surface_get_height(surface);
+	int32_t x = 0;
+	int32_t y = 0;
+	double font_size = 32 * scaling_factor;
+
+	// Assumed to be the portrait layout for now...
+	y = widget_height - widget_width;
+	widget_height = widget_width;
+
+	widget_height -= 2 * WIDGET_PADDING;
+	widget_width  -= 2 * WIDGET_PADDING;
+	x += WIDGET_PADDING;
+	y += WIDGET_PADDING;
+
+#ifdef WITH_DEBUG_RENDER
+	cairo_set_source_rgba(render_context->cairo, 0, 1, 1, 0.3);
+	cairo_rectangle(render_context->cairo, x, y, widget_width, widget_height);
+	cairo_fill(render_context->cairo);
+#endif
+
+	cairo_select_font_face(render_context->cairo, FONT_SELECTED, CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+	cairo_set_font_size(render_context->cairo, font_size);
+
+	/*
+	 * The pad area is a matrix of 3×4 buttons.
+	 */
+	cairo_set_line_width(render_context->cairo, 2.0);
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 4; j++) {
+			draw_button(render_context, widget_width, widget_height, x, y, i, j, font_size);
+		}
+	}
+}
+
 static bool render_frame(struct swaylock_surface *surface) {
 	struct render_context render_context;
 	render_context.surface = surface;
@@ -361,6 +516,42 @@ static bool render_frame(struct swaylock_surface *surface) {
 			}
 		}
 	}
+
+	// Compute buffer size for the pinpad.
+	// This also defines the metrics of the pinpad.
+	if (with_pinpad) {
+		// TODO: validate multi-display behaviour.
+		int smallest_width = surface->width;
+		int smallest_height = surface->height;
+
+		int height;
+		int width;
+
+		if (smallest_width < smallest_height) {
+			// Portrait
+			height = ceil(smallest_width * WIDGET_RATIO_HEIGHT / WIDGET_RATIO_WIDTH);
+			width = smallest_width;
+		}
+		else {
+			// Landscape
+			width = ceil(smallest_height * WIDGET_RATIO_WIDTH / WIDGET_RATIO_HEIGHT);
+			height = smallest_height;
+		}
+
+		height *= WIDGET_UI_PROPORTION;
+		width  *= WIDGET_UI_PROPORTION;
+
+		height *= surface->scale;
+		width *= surface->scale;
+
+		if (render_context.buffer_width < width) {
+			render_context.buffer_width = width;
+		}
+		if (render_context.buffer_height < height) {
+			render_context.buffer_height = height;
+		}
+	}
+
 	// Ensure buffer size is multiple of buffer scale - required by protocol
 	render_context.buffer_height += surface->scale - (render_context.buffer_height % surface->scale);
 	render_context.buffer_width += surface->scale - (render_context.buffer_width % surface->scale);
@@ -385,6 +576,13 @@ static bool render_frame(struct swaylock_surface *surface) {
 			(render_context.state->args.radius + render_context.state->args.thickness);
 	}
 
+	if (with_pinpad) {
+		// The buffer height is the pixel size... we want the logical size.
+		int buffer_height_unscaled = (render_context.buffer_height / 2);
+		// Push down not exactly centered.
+		subsurf_ypos = (surface->height - buffer_height_unscaled) / 3 * 2;
+	}
+
 	struct pool_buffer *buffer = get_next_buffer(render_context.state->shm,
 			surface->indicator_buffers, render_context.buffer_width, render_context.buffer_height);
 	if (buffer == NULL) {
@@ -405,9 +603,18 @@ static bool render_frame(struct swaylock_surface *surface) {
 	cairo_paint(render_context.cairo);
 	cairo_restore(render_context.cairo);
 
+#ifdef WITH_DEBUG_RENDER
+	cairo_set_source_rgba(render_context.cairo, 1, 0, 1, 0.5);
+	cairo_rectangle(render_context.cairo, 0, 0, render_context.buffer_width, render_context.buffer_height);
+	cairo_fill(render_context.cairo);
+#endif
+
 	if (draw_indicator) {
 		draw_classic_wheel(&render_context);
 	}
+
+	draw_pinpad(&render_context);
+
 	draw_text(&render_context);
 
 	// Send Wayland requests
