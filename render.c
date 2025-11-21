@@ -324,6 +324,7 @@ static void draw_button(
 	, int32_t j
 	, double font_size
 ) {
+	struct swaylock_state *state = render_context->state;
 	cairo_t *ctx = render_context->cairo;
 	int32_t num = i + 3*j;
 	int32_t button_width = floor(widget_width / 3);
@@ -341,6 +342,14 @@ static void draw_button(
 	x += i*button_width;
 	y += j*button_height;
 
+	// Only render the touch state.
+	// No further logic is done here.
+	if (state->touch_x >= x && state->touch_x <= x+button_width) {
+		if (state->touch_y >= y && state->touch_y <= y+button_height) {
+			pressed = true;
+		}
+	}
+
 	num += 1;
 	switch (num) {
 		case PAD_BUTTON_BACKSPACE:
@@ -355,19 +364,6 @@ static void draw_button(
 		default:
 			snprintf(text, 16, "%d", num);
 			break;
-	}
-
-	if (render_context->state->input_state == INPUT_STATE_PAD_ACTIVE) {
-		// FIXME
-		// if (password[input_position-1] == text[0]) {
-		//     pressed = true;
-		// }
-	}
-	if (render_context->state->auth_state == AUTH_STATE_VALIDATING && num == 12) {
-		pressed = true;
-	}
-	if (render_context->state->input_state == INPUT_STATE_PAD_BACKSPACE_ACTIVE && num == 10) {
-		pressed = true;
 	}
 
 	if (pressed) {
