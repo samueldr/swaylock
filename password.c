@@ -308,6 +308,21 @@ void swaylock_update_touch(struct swaylock_state *state, enum touch_event event,
 	if (event == TOUCH_EVENT_UP) {
 		button = pinpad_button_at(swaylock_surface, state->touch_x, state->touch_y);
 		if (button == state->initial_button) {
+			if ((button >= PAD_BUTTON_1 && button <= PAD_BUTTON_9) || button == PAD_BUTTON_ZERO) {
+				if (button == PAD_BUTTON_ZERO) {
+					button = PAD_BUTTON_0;
+				}
+				swaylock_handle_key(state, XKB_KEY_0 + button, '0' + button);
+			}
+			else if (button == PAD_BUTTON_BACKSPACE) {
+				swaylock_handle_key(state, XKB_KEY_BackSpace, 0);
+			}
+			else if (button == PAD_BUTTON_SEND) {
+				swaylock_handle_key(state, XKB_KEY_KP_Enter, 0);
+			}
+			else {
+				printf("Unhandled pinpad button %d\n", button);
+			}
 		}
 	}
 
