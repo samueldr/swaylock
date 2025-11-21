@@ -27,6 +27,12 @@ enum input_state {
 	INPUT_STATE_PAD_BACKSPACE_ACTIVE, // For the pin pad, so it looks more correct.
 };
 
+enum touch_event {
+	TOUCH_EVENT_DOWN,
+	TOUCH_EVENT_UP,
+	TOUCH_EVENT_MOVE,
+};
+
 struct swaylock_colorset {
 	uint32_t input;
 	uint32_t cleared;
@@ -139,6 +145,8 @@ struct swaylock_image {
 
 void swaylock_handle_key(struct swaylock_state *state,
 		xkb_keysym_t keysym, uint32_t codepoint);
+
+void swaylock_update_touch(struct swaylock_state *state, enum touch_event event, struct wl_surface *surface, int x, int y);
 
 void render(struct swaylock_surface *surface);
 void damage_state(struct swaylock_state *state);

@@ -221,3 +221,48 @@ void swaylock_handle_key(struct swaylock_state *state,
 		break;
 	}
 }
+
+/**
+ * Receives the zeroeth touch event.
+ * No multitouch support at the moment.
+ * The x and y values are scaled to the currently touched surface.
+ * NOTE: When touch_event is TOUCH_EVENT_UP, x and y will be 0.
+ * NOTE: Only TOUCH_EVENT_DOWN includes a valid surface.
+ */
+void swaylock_update_touch(struct swaylock_state *state, enum touch_event event, struct wl_surface *surface, int x, int y) {
+	struct swaylock_surface *swaylock_surface;
+
+	// Use either the attached surface, or the surface we now need to attach...
+	if (surface == NULL) {
+		surface = state->touched_surface;
+	}
+
+	// ... to find the swaylock "surfaces" we are touching.
+	wl_list_for_each(swaylock_surface, &state->surfaces, link) {
+		if (surface == swaylock_surface->child) {
+			break;
+		}
+	}
+
+	// Not touching a pinpad? Do nothing.
+	if (!swaylock_surface) {
+		return;
+	}
+
+	// Pre-scale the coordinates
+	state->touch_x = x * swaylock_surface->scale;
+	state->touch_y = y * swaylock_surface->scale;
+
+	switch (event) {
+		case TOUCH_EVENT_DOWN:
+			state->touched_surface = surface;
+			break;
+		case TOUCH_EVENT_UP:
+			state->touched_surface = NULL;
+			break;
+		case TOUCH_EVENT_MOVE:
+			break;
+	}
+
+	damage_state(state);
+}
