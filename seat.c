@@ -185,25 +185,29 @@ static const struct wl_pointer_listener pointer_listener = {
 
 static void wl_touch_down(void *data, struct wl_touch *wl_touch, uint32_t serial, uint32_t time, struct wl_surface *surface, int id, wl_fixed_t x, wl_fixed_t y) {
 	if (id == 0) {
-		state->touched_surface = surface;
-
-		wl_list_for_each(swaylock_surface, &state->surfaces, link) {
-			if (surface == swaylock_surface->child) {
-				break;
-			}
-		}
+		struct swaylock_seat *seat = data;
+		struct swaylock_state *state = seat->state;
+		int fixed_x = wl_fixed_to_double(x);
+		int fixed_y = wl_fixed_to_double(y);
+		swaylock_update_touch(state, TOUCH_EVENT_DOWN, surface, fixed_x, fixed_y);
 	}
 }
 
 static void wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial, uint32_t time, int id) {
 	if (id == 0) {
+		struct swaylock_seat *seat = data;
+		struct swaylock_state *state = seat->state;
+		swaylock_update_touch(state, TOUCH_EVENT_UP, NULL, 0, 0);
 	}
 }
 
 static void wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time, int id, wl_fixed_t x, wl_fixed_t y) {
 	if (id == 0) {
-		int scaled_x = wl_fixed_to_double(x);
-		int scaled_y = wl_fixed_to_double(y);
+		struct swaylock_seat *seat = data;
+		struct swaylock_state *state = seat->state;
+		int fixed_x = wl_fixed_to_double(x);
+		int fixed_y = wl_fixed_to_double(y);
+		swaylock_update_touch(state, TOUCH_EVENT_MOVE, NULL, fixed_x, fixed_y);
 	}
 }
 
