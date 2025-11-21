@@ -8,6 +8,7 @@
 #include "comm.h"
 #include "log.h"
 #include "loop.h"
+#include "pinpad.h"
 #include "seat.h"
 #include "swaylock.h"
 #include "unicode.h"
@@ -222,6 +223,47 @@ void swaylock_handle_key(struct swaylock_state *state,
 	}
 }
 
+// NOTE: See `draw_button` and `draw_pinpad`.
+static enum pad_button pinpad_button_at(struct swaylock_surface *surface, int x, int y) {
+	enum pad_button result = PAD_BUTTON_INVALID;
+	int width = surface->child_width;
+	int height = surface->child_height;
+	int pad_width = width;
+	int pad_height = pad_width;
+	int button_i, button_j = 0;
+
+	// Assumes the pinpad is in the square area at the bottom.
+	// Translates the origin of the touch to the button pad's top left...
+	int translated_x = x;
+	int translated_y = y - (height - pad_height);
+
+	// Translates the button padd padding.
+	translated_x -= WIDGET_PADDING;
+	translated_y -= WIDGET_PADDING;
+	// And adapts height/width accordingly.
+	pad_height -= 2 * WIDGET_PADDING;
+	pad_width  -= 2 * WIDGET_PADDING;
+
+	// Get the i,j coordinates of the button.
+	button_i = translated_x / (pad_width / 3);
+	button_j = translated_y / (pad_height / 4);
+
+	if (translated_x < 0) {
+		button_i -= 1;
+	}
+	if (translated_y < 0) {
+		button_j -= 1;
+	}
+
+	if (button_i >= 0 && button_i < 3) {
+		if (button_j >= 0 && button_j < 4) {
+			result = button_j * 3 + button_i + 1;
+		}
+	}
+
+	return result;
+}
+
 /**
  * Receives the zeroeth touch event.
  * No multitouch support at the moment.
@@ -230,7 +272,9 @@ void swaylock_handle_key(struct swaylock_state *state,
  * NOTE: Only TOUCH_EVENT_DOWN includes a valid surface.
  */
 void swaylock_update_touch(struct swaylock_state *state, enum touch_event event, struct wl_surface *surface, int x, int y) {
-	struct swaylock_surface *swaylock_surface;
+	enum pad_button button = PAD_BUTTON_INVALID;
+	struct swaylock_surface *swaylock_surface = NULL;
+	struct swaylock_surface *swaylock_surface_candidate = NULL;
 
 	// Use either the attached surface, or the surface we now need to attach...
 	if (surface == NULL) {
@@ -238,8 +282,9 @@ void swaylock_update_touch(struct swaylock_state *state, enum touch_event event,
 	}
 
 	// ... to find the swaylock "surfaces" we are touching.
-	wl_list_for_each(swaylock_surface, &state->surfaces, link) {
-		if (surface == swaylock_surface->child) {
+	wl_list_for_each(swaylock_surface_candidate, &state->surfaces, link) {
+		if (surface == swaylock_surface_candidate->child) {
+			swaylock_surface = swaylock_surface_candidate;
 			break;
 		}
 	}
@@ -248,10 +293,6 @@ void swaylock_update_touch(struct swaylock_state *state, enum touch_event event,
 	if (!swaylock_surface) {
 		return;
 	}
-
-	// Pre-scale the coordinates
-	state->touch_x = x * swaylock_surface->scale;
-	state->touch_y = y * swaylock_surface->scale;
 
 	switch (event) {
 		case TOUCH_EVENT_DOWN:
@@ -262,6 +303,21 @@ void swaylock_update_touch(struct swaylock_state *state, enum touch_event event,
 			break;
 		case TOUCH_EVENT_MOVE:
 			break;
+	}
+
+	if (event == TOUCH_EVENT_UP) {
+		button = pinpad_button_at(swaylock_surface, state->touch_x, state->touch_y);
+		if (button == state->initial_button) {
+		}
+	}
+
+	// Pre-scale the coordinates
+	state->touch_x = x * swaylock_surface->scale;
+	state->touch_y = y * swaylock_surface->scale;
+
+	if (event == TOUCH_EVENT_DOWN) {
+		button = pinpad_button_at(swaylock_surface, state->touch_x, state->touch_y);
+		state->initial_button = button;
 	}
 
 	damage_state(state);

@@ -5,6 +5,7 @@
 #include <wayland-client.h>
 #include "background-image.h"
 #include "cairo.h"
+#include "pinpad.h"
 #include "pool-buffer.h"
 #include "seat.h"
 
@@ -111,6 +112,7 @@ struct swaylock_state {
 	struct ext_session_lock_v1 *ext_session_lock_v1;
 	struct wl_surface *touched_surface;
 	int touch_x, touch_y;
+	enum pad_button initial_button;
 };
 
 struct swaylock_surface {
@@ -133,6 +135,8 @@ struct swaylock_surface {
 	struct wl_callback *frame;
 	// Dimensions of last wl_buffer committed to background surface
 	int last_buffer_width, last_buffer_height;
+	// Child width for pinpad touch coordinates
+	uint32_t child_width, child_height;
 };
 
 // There is exactly one swaylock_image for each -i argument

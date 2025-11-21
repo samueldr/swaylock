@@ -8,26 +8,6 @@
 #include "log.h"
 #include "pinpad.h"
 
-#define WIDGET_UI_PROPORTION (65/100.0)
-
-// TODO: better color selection than a define :/
-#ifndef COLOR_RGB_SELECTED
-#define COLOR_RGB_SELECTED COLOR_RGB_WHITE
-#endif
-
-#ifndef FONT_SELECTED
-#define FONT_SELECTED "Roboto Condensed Light"
-#endif
-
-#define FONT_CLOCK_MULTIPLIER (26/10.0)
-
-#define COLOR_RGB_WHITE 1, 1, 1
-#define COLOR_RGB_BLACK 0, 0, 0
-
-#define WIDGET_RATIO_WIDTH 11
-#define WIDGET_RATIO_HEIGHT 16
-#define WIDGET_PADDING 16
-
 #define M_PI 3.14159265358979323846
 const float TYPE_INDICATOR_RANGE = M_PI / 3.0f;
 
@@ -318,8 +298,8 @@ static void draw_button(
 	struct render_context* render_context
 	, int32_t widget_width
 	, int32_t widget_height
-	, int32_t x
-	, int32_t y
+	, int32_t origin_x
+	, int32_t origin_y
 	, int32_t i
 	, int32_t j
 	, double font_size
@@ -331,24 +311,18 @@ static void draw_button(
 	int32_t button_height = floor(widget_height / 4);
 	char text[16] = "";
 	bool pressed = false;
+	int x = origin_x;
+	int y = origin_y;
 
-
-	// Merge outlines
+	// Nudge buttons around to merge the outlines.
 	x += 1;
 	y += 3;
 	button_width -= 1;
 	button_height -= 1;
 
+	// Map to the location of the button
 	x += i*button_width;
 	y += j*button_height;
-
-	// Only render the touch state.
-	// No further logic is done here.
-	if (state->touch_x >= x && state->touch_x <= x+button_width) {
-		if (state->touch_y >= y && state->touch_y <= y+button_height) {
-			pressed = true;
-		}
-	}
 
 	num += 1;
 	switch (num) {
@@ -365,6 +339,17 @@ static void draw_button(
 			snprintf(text, 16, "%d", num);
 			break;
 	}
+
+	// Only render the touch state.
+	// No further logic is done here.
+	if (state->touch_x >= x && state->touch_x <= x+button_width) {
+		if (state->touch_y >= y && state->touch_y <= y+button_height) {
+			if (num == state->initial_button) {
+				pressed = true;
+			}
+		}
+	}
+
 
 	if (pressed) {
 		cairo_rectangle(ctx, x, y, button_width, button_height);
@@ -394,7 +379,9 @@ static void draw_pinpad(struct render_context *render_context) {
 	int32_t y = 0;
 	double font_size = 32 * scaling_factor;
 
-	// Assumed to be the portrait layout for now...
+	// The pinpad is at the bottom of the vertical widget.
+	// It is square, the buttons are rectangle as they are in 3×4 layout.
+	// The origin of the pad buttons is the top left of the square fitting at the bottom.
 	y = widget_height - widget_width;
 	widget_height = widget_width;
 
@@ -574,9 +561,10 @@ static bool render_frame(struct swaylock_surface *surface) {
 
 	if (with_pinpad) {
 		// The buffer height is the pixel size... we want the logical size.
-		int buffer_height_unscaled = (render_context.buffer_height / 2);
+		int buffer_height_unscaled = (render_context.buffer_height / surface->scale);
 		// Push down not exactly centered.
 		subsurf_ypos = (surface->height - buffer_height_unscaled) / 3 * 2;
+
 	}
 
 	struct pool_buffer *buffer = get_next_buffer(render_context.state->shm,
@@ -612,6 +600,10 @@ static bool render_frame(struct swaylock_surface *surface) {
 	draw_pinpad(&render_context);
 
 	draw_text(&render_context);
+
+	// For locating the pinpad buttons for the actions.
+	surface->child_width = render_context.buffer_width;
+	surface->child_height = render_context.buffer_height;
 
 	// Send Wayland requests
 	wl_subsurface_set_position(surface->subsurface, subsurf_xpos, subsurf_ypos);
